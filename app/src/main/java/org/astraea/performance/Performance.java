@@ -16,7 +16,6 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.internals.DefaultPartitioner;
-import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.WakeupException;
 import org.apache.kafka.common.record.CompressionType;
 import org.astraea.argument.ArgumentUtil;
@@ -178,7 +177,7 @@ public class Performance {
         producer
             .sender()
             .topic(param.topic)
-            .partition(partitionID(param))
+            .partition(partition(param))
             .key(manager.getKey().orElse(null))
             .value(payload.get())
             .timestamp(start)
@@ -198,11 +197,10 @@ public class Performance {
         }
       }
 
-      private int partitionID(Argument param) {
+      private int partition(Argument param) {
         try (var topicAdmin = TopicAdmin.of(param.props())) {
-          List<TopicPartition> partitions;
           if (param.specifyBroker != -1) {
-            partitions =
+            var partitions =
                 topicAdmin.partitionsOfBrokers(Set.of(param.topic), Set.of(param.specifyBroker));
             return partitions.get((int) (Math.random() * partitions.size())).partition();
           } else return -1;

@@ -1,10 +1,30 @@
 package org.astraea.topic;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import org.apache.kafka.clients.admin.*;
+import org.apache.kafka.clients.admin.Admin;
+import org.apache.kafka.clients.admin.AdminClientConfig;
+import org.apache.kafka.clients.admin.ConfigEntry;
+import org.apache.kafka.clients.admin.ConsumerGroupListing;
+import org.apache.kafka.clients.admin.ListTopicsOptions;
+import org.apache.kafka.clients.admin.MemberDescription;
+import org.apache.kafka.clients.admin.NewPartitionReassignment;
+import org.apache.kafka.clients.admin.NewTopic;
+import org.apache.kafka.clients.admin.OffsetSpec;
+import org.apache.kafka.clients.admin.ReplicaInfo;
 import org.apache.kafka.common.Node;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.TopicPartitionReplica;
@@ -215,14 +235,9 @@ public class Builder {
     public List<TopicPartition> partitionsOfBrokers(Set<String> topics, Set<Integer> brokersID) {
       return Utils.handleException(
           () ->
-              admin.describeTopics(topics).all().get().entrySet().stream()
-                  .flatMap(
-                      e ->
-                          e.getValue().partitions().stream()
-                              .filter(
-                                  topicPartitionInfo ->
-                                      brokersID.contains(topicPartitionInfo.leader().id()))
-                              .map(p -> new TopicPartition(e.getKey(), p.partition())))
+              replicas(topics).entrySet().stream()
+                  .filter(e -> e.getValue().stream().anyMatch(r -> brokersID.contains(r.broker())))
+                  .map(Map.Entry::getKey)
                   .collect(Collectors.toList()));
     }
 
