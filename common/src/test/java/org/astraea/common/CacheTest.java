@@ -25,6 +25,12 @@ import org.junit.jupiter.api.Test;
 public class CacheTest {
 
   @Test
+  void test() {
+    String path = Thread.currentThread().getContextClassLoader().getResource("").getPath();
+    System.out.println(path);
+  }
+
+  @Test
   void testCacheCleanup() {
     var cache =
         Cache.<String, String>builder(key -> key + "-test")

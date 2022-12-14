@@ -16,7 +16,6 @@
  */
 package org.astraea.common.partitioner.bucket;
 
-import java.io.File;
 import java.io.FileWriter;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -44,6 +43,7 @@ public class BucketPartitioner implements Partitioner {
   private final ConcurrentSkipListMap<String, AtomicInteger> bucketRecordCounterMap =
       new ConcurrentSkipListMap<>();
   private final AtomicInteger init = new AtomicInteger(-1);
+  private final Map<String, Integer> keyCorrespondingPartitionInWarmUp = new ConcurrentHashMap<>();
   private Map<String, Integer> keyCorrespondingPartition;
   private long startTimeStamp;
   private boolean complete = false;
@@ -53,7 +53,7 @@ public class BucketPartitioner implements Partitioner {
       String topic, Object key, byte[] keyBytes, Object value, byte[] valueBytes, Cluster cluster) {
     return overTenSecond()
         ? bucketPartition(topic, key, cluster)
-        : warmerPartition(topic, key, cluster);
+        : warmerPartition(topic, key, keyBytes, cluster);
   }
 
   @Override
@@ -65,11 +65,18 @@ public class BucketPartitioner implements Partitioner {
   public void close() {
     SimpleDateFormat formatter = new SimpleDateFormat("yyyy-MM-dd 'at' HH:mm:ss z");
     Date date = new Date(System.currentTimeMillis());
-    String title = formatter.format(date) + ".csv";
-    boolean mkdir = new File(title).mkdir();
+    String path = Thread.currentThread().getContextClassLoader().getResource("").getPath();
+    String title = path + formatter.format(date) + ".csv";
+    System.out.println(title);
     try (CsvWriter csvWriter =
         CsvWriter.builder(org.astraea.common.Utils.packException(() -> new FileWriter(title)))
             .build()) {
+      csvWriter.rawAppend(List.of("Key Corresponding in the Warm Up"));
+      csvWriter.rawAppend(List.of(""));
+
+      keyCorrespondingPartitionInWarmUp.forEach(
+          (key, value) -> csvWriter.rawAppend(List.of(key, String.valueOf(value))));
+
       csvWriter.rawAppend(List.of("Record number in the Warm Up"));
       csvWriter.rawAppend(List.of(""));
       csvWriter.rawAppend(List.of("Key", "Count"));
@@ -138,31 +145,67 @@ public class BucketPartitioner implements Partitioner {
       }
     }
     bucketRecordCounterMap
-        .computeIfAbsent(String.valueOf(key), k -> new AtomicInteger(0))
+        .computeIfAbsent(nullProcess(key), k -> new AtomicInteger(0))
         .incrementAndGet();
-    return keyCorrespondingPartition.get(String.valueOf(key));
+    return keyCorrespondingPartition.get(nullProcess(key));
   }
 
-  private int warmerPartition(String topic, Object key, Cluster cluster) {
+  private int warmerPartition(String topic, Object key, byte[] serializedKey, Cluster cluster) {
     keysRecordCounterMap
-        .computeIfAbsent(String.valueOf(key), k -> new AtomicInteger(0))
+        .computeIfAbsent(nullProcess(key), k -> new AtomicInteger(0))
         .incrementAndGet();
-
-    List<PartitionInfo> partitions = cluster.partitionsForTopic(topic);
-    int numPartitions = partitions.size();
-    int nextValue = nextValue(topic);
-    List<PartitionInfo> availablePartitions = cluster.availablePartitionsForTopic(topic);
-    if (!availablePartitions.isEmpty()) {
-      int part = Utils.toPositive(nextValue) % availablePartitions.size();
-      return availablePartitions.get(part).partition();
-    } else {
-      // no partitions are available, give a non-available partition
-      return Utils.toPositive(nextValue) % numPartitions;
-    }
+    int target =
+        Utils.toPositive(serializedKey == null ? 0 : murmur2(serializedKey))
+            % cluster.partitionsForTopic(topic).size();
+    keyCorrespondingPartitionInWarmUp.putIfAbsent(nullProcess(key), target);
+    return target;
   }
 
-  private int nextValue(String topic) {
-    AtomicInteger counter = topicCounterMap.computeIfAbsent(topic, k -> new AtomicInteger(0));
-    return counter.getAndIncrement();
+  private String nullProcess(Object key) {
+    return String.valueOf(key) == null ? "0" : String.valueOf(key);
+  }
+
+  public static int murmur2(final byte[] data) {
+    int length = data.length;
+    int seed = 0x9747b28c;
+    // 'm' and 'r' are mixing constants generated offline.
+    // They're not really 'magic', they just happen to work well.
+    final int m = 0x5bd1e995;
+    final int r = 24;
+
+    // Initialize the hash to a random value
+    int h = seed ^ length;
+    int length4 = length / 4;
+
+    for (int i = 0; i < length4; i++) {
+      final int i4 = i * 4;
+      int k =
+          (data[i4 + 0] & 0xff)
+              + ((data[i4 + 1] & 0xff) << 8)
+              + ((data[i4 + 2] & 0xff) << 16)
+              + ((data[i4 + 3] & 0xff) << 24);
+      k *= m;
+      k ^= k >>> r;
+      k *= m;
+      h *= m;
+      h ^= k;
+    }
+
+    // Handle the last few bytes of the input array
+    switch (length % 4) {
+      case 3:
+        h ^= (data[(length & ~3) + 2] & 0xff) << 16;
+      case 2:
+        h ^= (data[(length & ~3) + 1] & 0xff) << 8;
+      case 1:
+        h ^= data[length & ~3] & 0xff;
+        h *= m;
+    }
+
+    h ^= h >>> 13;
+    h *= m;
+    h ^= h >>> 15;
+
+    return h;
   }
 }

@@ -68,7 +68,7 @@ public class Performance {
   private static DataSupplier dataSupplier(Performance.Argument argument) {
     return DataSupplier.of(
         argument.exeTime,
-        argument.keyDistributionType.create(10000),
+        argument.keyDistributionType.create(argument.keyRange),
         argument.keyDistributionType.create(argument.keySize.measurement(DataUnit.Byte).intValue()),
         argument.valueDistributionType.create(10000),
         argument.valueDistributionType.create(
@@ -317,6 +317,11 @@ public class Performance {
                 + "partition level. This argument can't be use in conjunction with `specify.brokers`, `topics` or `partitioner`.",
         converter = TopicPartitionField.class)
     List<TopicPartition> specifyPartitions = List.of();
+
+    @Parameter(
+        names = {"--key.range"},
+        description = "number of distinct key")
+    int keyRange = 10000;
 
     /**
      * @return a supplier that randomly return a sending target
