@@ -36,6 +36,7 @@ dependencies {
     implementation "org.slf4j:slf4j-nop:${versions["slf4j"]}"
     implementation "org.apache.commons:commons-math3:${versions["math3"]}"
     implementation "com.opencsv:opencsv:${versions["opencsv"]}"
+    implementation project(":fs")
 }
 
 java {
