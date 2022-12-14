@@ -16,14 +16,7 @@
  */
 package org.astraea.common.partitioner.bucket;
 
-import org.apache.kafka.clients.producer.Partitioner;
-import org.apache.kafka.common.Cluster;
-import org.apache.kafka.common.PartitionInfo;
-import org.apache.kafka.common.utils.Utils;
-import org.astraea.common.Configuration;
-import org.astraea.common.csv.CsvWriter;
-import org.astraea.fs.FileSystem;
-
+import java.io.File;
 import java.io.FileWriter;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -38,13 +31,18 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+import org.apache.kafka.clients.producer.Partitioner;
+import org.apache.kafka.common.Cluster;
+import org.apache.kafka.common.PartitionInfo;
+import org.apache.kafka.common.utils.Utils;
+import org.astraea.common.csv.CsvWriter;
 
 public class BucketPartitioner implements Partitioner {
   private final ConcurrentMap<String, AtomicInteger> topicCounterMap = new ConcurrentHashMap<>();
   private final ConcurrentSkipListMap<String, AtomicInteger> keysRecordCounterMap =
       new ConcurrentSkipListMap<>();
   private final ConcurrentSkipListMap<String, AtomicInteger> bucketRecordCounterMap =
-          new ConcurrentSkipListMap<>();
+      new ConcurrentSkipListMap<>();
   private final AtomicInteger init = new AtomicInteger(-1);
   private Map<String, Integer> keyCorrespondingPartition;
   private long startTimeStamp;
@@ -65,25 +63,28 @@ public class BucketPartitioner implements Partitioner {
 
   @Override
   public void close() {
-    try(FileSystem local = FileSystem.of("local", Configuration.EMPTY)) {
-      SimpleDateFormat formatter= new SimpleDateFormat("yyyy-MM-dd 'at' HH:mm:ss z");
-      Date date = new Date(System.currentTimeMillis());
-      String title = formatter.format(date) + ".csv";
-      local.mkdir(title);
-      try (CsvWriter csvWriter = CsvWriter.builder(org.astraea.common.Utils.packException(() -> new FileWriter(title))).build()){
-          csvWriter.rawAppend(List.of("Record number in the Warm Up"));
-          csvWriter.rawAppend(List.of(""));
-          csvWriter.rawAppend(List.of("Key","Count"));
-          keysRecordCounterMap.forEach((key, value) -> csvWriter.rawAppend(List.of(key, String.valueOf(value))));
-          csvWriter.rawAppend(List.of());
-          csvWriter.rawAppend(List.of("Key Corresponding Partition"));
-          keyCorrespondingPartition.forEach((key, value) -> csvWriter.rawAppend(List.of(key, String.valueOf(value))));
-          csvWriter.rawAppend(List.of());
-          csvWriter.rawAppend(List.of("Record number after the Warm Up"));
-          bucketRecordCounterMap.forEach((key, value) -> csvWriter.rawAppend(List.of(key, String.valueOf(value))));
-        }
-      }
+    SimpleDateFormat formatter = new SimpleDateFormat("yyyy-MM-dd 'at' HH:mm:ss z");
+    Date date = new Date(System.currentTimeMillis());
+    String title = formatter.format(date) + ".csv";
+    boolean mkdir = new File(title).mkdir();
+    try (CsvWriter csvWriter =
+        CsvWriter.builder(org.astraea.common.Utils.packException(() -> new FileWriter(title)))
+            .build()) {
+      csvWriter.rawAppend(List.of("Record number in the Warm Up"));
+      csvWriter.rawAppend(List.of(""));
+      csvWriter.rawAppend(List.of("Key", "Count"));
+      keysRecordCounterMap.forEach(
+          (key, value) -> csvWriter.rawAppend(List.of(key, String.valueOf(value))));
+      csvWriter.rawAppend(List.of());
+      csvWriter.rawAppend(List.of("Key Corresponding Partition"));
+      keyCorrespondingPartition.forEach(
+          (key, value) -> csvWriter.rawAppend(List.of(key, String.valueOf(value))));
+      csvWriter.rawAppend(List.of());
+      csvWriter.rawAppend(List.of("Record number after the Warm Up"));
+      bucketRecordCounterMap.forEach(
+          (key, value) -> csvWriter.rawAppend(List.of(key, String.valueOf(value))));
     }
+  }
 
   private boolean overTenSecond() {
     if (!complete && System.currentTimeMillis() - startTimeStamp > 10000) {
@@ -123,12 +124,11 @@ public class BucketPartitioner implements Partitioner {
               Map.Entry<Integer, Integer> partitionNext = countCostIterator.next();
               partitionNext.setValue(partitionNext.getValue() + keyNext.getValue());
               keyPartition.put(keyNext.getKey(), partitionNext.getKey());
-            }
-             else {
+            } else {
               countCost.sort(Map.Entry.comparingByValue());
               var keyNext = keys.next();
               Map.Entry<Integer, Integer> head = countCost.get(0);
-              head.setValue(head.getValue()+keyNext.getValue());
+              head.setValue(head.getValue() + keyNext.getValue());
               keyPartition.put(keyNext.getKey(), head.getKey());
             }
           }
@@ -137,8 +137,9 @@ public class BucketPartitioner implements Partitioner {
         }
       }
     }
-    bucketRecordCounterMap.computeIfAbsent(String.valueOf(key), k -> new AtomicInteger(0))
-            .incrementAndGet();
+    bucketRecordCounterMap
+        .computeIfAbsent(String.valueOf(key), k -> new AtomicInteger(0))
+        .incrementAndGet();
     return keyCorrespondingPartition.get(String.valueOf(key));
   }
 

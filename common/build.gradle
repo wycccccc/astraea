@@ -28,7 +28,6 @@ dependencies {
     testImplementation "org.apache.kafka:connect-runtime:${versions["kafka"]}"
     testImplementation project(':it')
 
-
     implementation "org.apache.kafka:kafka-clients:${versions["kafka"]}"
     implementation "com.beust:jcommander:${versions["jcommander"]}"
     implementation "com.fasterxml.jackson.datatype:jackson-datatype-jdk8:${versions["jackson"]}"
@@ -36,7 +35,6 @@ dependencies {
     implementation "org.slf4j:slf4j-nop:${versions["slf4j"]}"
     implementation "org.apache.commons:commons-math3:${versions["math3"]}"
     implementation "com.opencsv:opencsv:${versions["opencsv"]}"
-    implementation project(":fs")
 }
 
 java {
